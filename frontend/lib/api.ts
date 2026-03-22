@@ -62,3 +62,110 @@ export async function apiFetch(
 
   return res;
 }
+
+// ─── Finanzas ────────────────────────────────────────────────────────────────
+
+import type { Category, Summary, Transaction } from "@/types/finance";
+
+export async function getCategories(): Promise<Category[]> {
+  const res = await apiFetch("/finance/categories/");
+  if (!res.ok) throw new Error("Error al cargar categorías");
+  return res.json();
+}
+
+export async function getSummary(month: number, year: number): Promise<Summary> {
+  const res = await apiFetch(`/finance/summary/?month=${month}&year=${year}`);
+  if (!res.ok) throw new Error("Error al cargar resumen");
+  return res.json();
+}
+
+export async function getTransactions(
+  month: number,
+  year: number,
+  type?: "income" | "expense",
+  category?: number
+): Promise<Transaction[]> {
+  let url = `/finance/transactions/?month=${month}&year=${year}`;
+  if (type) url += `&type=${type}`;
+  if (category) url += `&category=${category}`;
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error("Error al cargar transacciones");
+  return res.json();
+}
+
+export async function createTransaction(data: {
+  amount: string;
+  description: string;
+  date: string;
+  type: "income" | "expense";
+  category: number | null;
+}): Promise<Transaction> {
+  const res = await apiFetch("/finance/transactions/", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(JSON.stringify(err));
+  }
+  return res.json();
+}
+
+export async function updateTransaction(
+  id: number,
+  data: Partial<{
+    amount: string;
+    description: string;
+    date: string;
+    type: "income" | "expense";
+    category: number | null;
+  }>
+): Promise<Transaction> {
+  const res = await apiFetch(`/finance/transactions/${id}/`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Error al actualizar transacción");
+  return res.json();
+}
+
+export async function deleteTransaction(id: number): Promise<void> {
+  const res = await apiFetch(`/finance/transactions/${id}/`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Error al eliminar transacción");
+}
+
+export async function duplicateTransaction(id: number): Promise<Transaction> {
+  const res = await apiFetch(`/finance/transactions/${id}/duplicate/`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Error al duplicar transacción");
+  return res.json();
+}
+
+// ─── Presupuestos ─────────────────────────────────────────────────────────────
+
+import type { BudgetItem } from "@/types/finance";
+
+export async function getBudgets(): Promise<BudgetItem[]> {
+  const res = await apiFetch("/finance/budgets/");
+  if (!res.ok) throw new Error("Error al cargar presupuestos");
+  return res.json();
+}
+
+export async function upsertBudget(
+  categoryId: number,
+  amount: number
+): Promise<void> {
+  const res = await apiFetch(`/finance/budgets/${categoryId}/`, {
+    method: "PUT",
+    body: JSON.stringify({ amount }),
+  });
+  if (!res.ok) throw new Error("Error al guardar presupuesto");
+}
+
+export async function deleteBudget(categoryId: number): Promise<void> {
+  const res = await apiFetch(`/finance/budgets/${categoryId}/`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Error al eliminar presupuesto");
+}

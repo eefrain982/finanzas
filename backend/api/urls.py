@@ -18,4 +18,13 @@ urlpatterns = [
     # Admin (requiere rol admin)
     path('admin/items/', views.admin_items_list, name='admin-items'),
     path('admin/users/', views.admin_users_list, name='admin-users'),
+    # Finanzas
+    path('finance/categories/', views.categories_list, name='finance-categories'),
+    path('finance/transactions/', views.transactions_list, name='finance-transactions'),
+    path('finance/transactions/<int:pk>/', views.transaction_detail, name='finance-transaction-detail'),
+    path('finance/transactions/<int:pk>/duplicate/', views.transaction_duplicate, name='finance-transaction-duplicate'),
+    path('finance/summary/', views.summary, name='finance-summary'),
+    # Presupuestos
+    path('finance/budgets/', views.budgets_list, name='finance-budgets'),
+    path('finance/budgets/<int:category_id>/', views.budget_detail, name='finance-budget-detail'),
 ]

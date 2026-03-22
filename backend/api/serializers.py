@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Item, Profile
+from .models import Budget, Category, Item, Profile, Transaction
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -50,6 +50,42 @@ class ItemSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "description", "owner", "created_at", "updated_at"]
         read_only_fields = ["id", "owner", "created_at", "updated_at"]
 
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ["id", "name", "icon", "color", "type"]
+
+
+class TransactionSerializer(serializers.ModelSerializer):
+    owner = serializers.ReadOnlyField(source="owner.username")
+    category_detail = CategorySerializer(source="category", read_only=True)
+
+    class Meta:
+        model = Transaction
+        fields = [
+            "id",
+            "amount",
+            "description",
+            "date",
+            "type",
+            "category",
+            "category_detail",
+            "owner",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "owner", "category_detail", "created_at", "updated_at"]
+
+
+class BudgetSerializer(serializers.ModelSerializer):
+    category_detail = CategorySerializer(source="category", read_only=True)
+    owner = serializers.ReadOnlyField(source="owner.username")
+
+    class Meta:
+        model = Budget
+        fields = ["id", "category", "category_detail", "owner", "amount", "updated_at"]
+        read_only_fields = ["id", "owner", "category_detail", "updated_at"]
 
 
 class ProfileSerializer(serializers.ModelSerializer):

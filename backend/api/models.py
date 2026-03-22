@@ -47,3 +47,86 @@ class Item(models.Model):
     def __str__(self):
         return f"{self.title} ({self.owner.username})"
 
+
+class Category(models.Model):
+    class CategoryType(models.TextChoices):
+        INCOME = "income", "Ingreso"
+        EXPENSE = "expense", "Egreso"
+        BOTH = "both", "Ambos"
+
+    name = models.CharField(max_length=100, unique=True)
+    color = models.CharField(max_length=7, default="#6B7280")   # hex color
+    icon = models.CharField(max_length=10, default="📌")         # emoji
+    type = models.CharField(
+        max_length=10,
+        choices=CategoryType.choices,
+        default=CategoryType.EXPENSE,
+    )
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name_plural = "Categories"
+
+    def __str__(self):
+        return f"{self.icon} {self.name}"
+
+
+class Transaction(models.Model):
+    class TransactionType(models.TextChoices):
+        INCOME = "income", "Ingreso"
+        EXPENSE = "expense", "Egreso"
+
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    description = models.CharField(max_length=255, blank=True, default="")
+    date = models.DateField()
+    type = models.CharField(
+        max_length=10,
+        choices=TransactionType.choices,
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="transactions",
+    )
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="transactions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at"]
+
+    def __str__(self):
+        sign = "+" if self.type == "income" else "-"
+        return f"{sign}${self.amount} — {self.category} ({self.owner.username})"
+
+
+class Budget(models.Model):
+    """Presupuesto fijo mensual por categoría y usuario."""
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="budgets",
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        related_name="budgets",
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # Un solo presupuesto por usuario+categoría
+        unique_together = [("owner", "category")]
+        ordering = ["category__name"]
+
+    def __str__(self):
+        return f"{self.owner.username} — {self.category} — ${self.amount}"
+
