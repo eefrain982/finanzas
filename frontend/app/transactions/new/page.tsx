@@ -6,7 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 import {
   createTransaction,
   getCategories,
-  getTransactions,
+  getTransactionById,
   updateTransaction,
 } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +31,8 @@ function NewTransactionForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [loadingTx, setLoadingTx] = useState(false);
+
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
   }, [user, authLoading, router]);
@@ -40,24 +42,20 @@ function NewTransactionForm() {
     getCategories().then(setCategories).catch(() => {});
   }, [user]);
 
-  // Si viene con ?edit=id cargamos la transacción
+  // Si viene con ?edit=id cargamos la transacción directamente por ID
   useEffect(() => {
     if (!editId || !user) return;
-    const today = new Date();
-    getTransactions(today.getMonth() + 1, today.getFullYear())
-      .then((all) => {
-        // buscar en todos los meses no es trivial; cargamos del mes actual
-        // Si no está, buscamos 3 meses hacia atrás
-        const found = all.find((t) => t.id === Number(editId));
-        if (found) {
-          setType(found.type);
-          setAmount(found.amount);
-          setDescription(found.description);
-          setDate(found.date);
-          setCategoryId(found.category ?? "");
-        }
+    setLoadingTx(true);
+    getTransactionById(Number(editId))
+      .then((tx) => {
+        setType(tx.type);
+        setAmount(tx.amount);
+        setDescription(tx.description);
+        setDate(tx.date);
+        setCategoryId(tx.category ?? "");
       })
-      .catch(() => {});
+      .catch(() => setError("No se encontró la transacción a editar"))
+      .finally(() => setLoadingTx(false));
   }, [editId, user]);
 
   const filteredCategories = categories.filter(
@@ -94,6 +92,14 @@ function NewTransactionForm() {
   }
 
   if (authLoading || !user) return null;
+
+  if (loadingTx) {
+    return (
+      <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <p className="text-gray-400">Cargando transacción...</p>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-6 flex items-start justify-center pt-16">

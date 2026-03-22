@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { deleteTransaction, duplicateTransaction, getCategories, getTransactions } from "@/lib/api";
+import { deleteTransaction, duplicateTransaction, exportTransactions, getCategories, getTransactions } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import type { Category, Transaction } from "@/types/finance";
 
@@ -33,6 +33,7 @@ export default function TransactionsPage() {
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
@@ -87,6 +88,17 @@ export default function TransactionsPage() {
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await exportTransactions(month, year);
+    } catch {
+      alert("Error al exportar");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (authLoading || !user) return null;
 
   const totalIncome = transactions
@@ -108,6 +120,14 @@ export default function TransactionsPage() {
             </p>
           </div>
           <div className="flex gap-3">
+            <button
+              onClick={handleExport}
+              disabled={exporting || transactions.length === 0}
+              className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition disabled:opacity-50 text-sm"
+              title="Descargar CSV del mes"
+            >
+              {exporting ? "⏳ Exportando..." : "⬇️ CSV"}
+            </button>
             <Link
               href="/transactions/new"
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition"

@@ -234,6 +234,49 @@ def transaction_duplicate(request, pk):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def transactions_export(request):
+    """
+    GET /api/finance/transactions/export/?month=3&year=2026
+    Genera y devuelve un CSV con las transacciones del mes.
+    """
+    import csv
+    from datetime import date
+    from django.http import HttpResponse
+
+    today = date.today()
+    month = int(request.GET.get('month', today.month))
+    year  = int(request.GET.get('year',  today.year))
+
+    qs = (
+        Transaction.objects
+        .filter(owner=request.user, date__month=month, date__year=year)
+        .select_related('category')
+        .order_by('date', '-created_at')
+    )
+
+    filename = f"transacciones_{year}_{month:02d}.csv"
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    # BOM para que Excel abra correctamente con tildes
+    response.write('\ufeff')
+
+    writer = csv.writer(response)
+    writer.writerow(['Fecha', 'Tipo', 'Categoría', 'Descripción', 'Monto (MXN)'])
+
+    for tx in qs:
+        writer.writerow([
+            tx.date.strftime('%Y-%m-%d'),
+            'Ingreso' if tx.type == 'income' else 'Egreso',
+            tx.category.name if tx.category else 'Sin categoría',
+            tx.description or '',
+            f"{tx.amount:.2f}",
+        ])
+
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def summary(request):
     """
     GET /api/finance/summary/?month=3&year=2026

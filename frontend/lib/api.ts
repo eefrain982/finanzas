@@ -134,6 +134,32 @@ export async function deleteTransaction(id: number): Promise<void> {
   if (!res.ok) throw new Error("Error al eliminar transacción");
 }
 
+export async function getTransactionById(id: number): Promise<Transaction> {
+  const res = await apiFetch(`/finance/transactions/${id}/`);
+  if (!res.ok) throw new Error("Transacción no encontrada");
+  return res.json();
+}
+
+export async function exportTransactions(
+  month: number,
+  year: number
+): Promise<void> {
+  const res = await apiFetch(
+    `/finance/transactions/export/?month=${month}&year=${year}`
+  );
+  if (!res.ok) throw new Error("Error al exportar");
+  // Descargamos el blob como archivo
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `transacciones_${year}_${String(month).padStart(2, "0")}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function duplicateTransaction(id: number): Promise<Transaction> {
   const res = await apiFetch(`/finance/transactions/${id}/duplicate/`, {
     method: "POST",

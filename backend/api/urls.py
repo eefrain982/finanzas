@@ -21,6 +21,7 @@ urlpatterns = [
     # Finanzas
     path('finance/categories/', views.categories_list, name='finance-categories'),
     path('finance/transactions/', views.transactions_list, name='finance-transactions'),
+    path('finance/transactions/export/', views.transactions_export, name='finance-transactions-export'),
     path('finance/transactions/<int:pk>/', views.transaction_detail, name='finance-transaction-detail'),
     path('finance/transactions/<int:pk>/duplicate/', views.transaction_duplicate, name='finance-transaction-duplicate'),
     path('finance/summary/', views.summary, name='finance-summary'),
