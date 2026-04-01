@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Budget, Category, Item, Profile, Transaction
+from .models import Budget, CardExpense, CardPayment, CreditCard, Category, Item, Profile, Transaction
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -86,6 +86,43 @@ class BudgetSerializer(serializers.ModelSerializer):
         model = Budget
         fields = ["id", "category", "category_detail", "owner", "amount", "updated_at"]
         read_only_fields = ["id", "owner", "category_detail", "updated_at"]
+
+
+class CreditCardSerializer(serializers.ModelSerializer):
+    owner = serializers.ReadOnlyField(source="owner.username")
+
+    class Meta:
+        model = CreditCard
+        fields = [
+            "id", "owner", "nombre", "banco", "ultimos_4", "color",
+            "limite_credito", "limite_mensual", "corte_dia", "pago_dia",
+            "activa", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "owner", "created_at", "updated_at"]
+
+
+class CardExpenseSerializer(serializers.ModelSerializer):
+    mensualidad = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
+
+    class Meta:
+        model = CardExpense
+        fields = [
+            "id", "card", "descripcion", "fecha", "monto_total",
+            "es_msi", "meses", "mensualidad", "pagado", "created_at",
+        ]
+        read_only_fields = ["id", "mensualidad", "created_at"]
+
+
+class CardPaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CardPayment
+        fields = [
+            "id", "card", "fecha", "monto", "tipo", "pago_minimo",
+            "notas", "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
 
 
 class ProfileSerializer(serializers.ModelSerializer):

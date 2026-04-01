@@ -126,6 +126,19 @@ export default function Home() {
             </Link>
 
             <Link
+              href="/cards"
+              className="bg-gradient-to-br from-indigo-900/60 to-indigo-800/40 border border-indigo-700 rounded-2xl p-6 hover:border-indigo-500 transition group"
+            >
+              <div className="text-4xl mb-3">💳</div>
+              <h2 className="text-lg font-semibold text-white group-hover:text-indigo-300 transition">
+                Tarjetas de crédito
+              </h2>
+              <p className="text-gray-400 text-sm mt-1">
+                Controla saldos, cortes y gastos MSI
+              </p>
+            </Link>
+
+            <Link
               href="/profile"
               className="bg-gradient-to-br from-gray-800/60 to-gray-700/40 border border-gray-600 rounded-2xl p-6 hover:border-gray-500 transition group"
             >

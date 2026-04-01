@@ -106,6 +106,86 @@ class Transaction(models.Model):
         return f"{sign}${self.amount} — {self.category} ({self.owner.username})"
 
 
+class CreditCard(models.Model):
+    """Tarjeta de crédito del usuario."""
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="credit_cards"
+    )
+    nombre = models.CharField(max_length=100)          # "BBVA Azul"
+    banco = models.CharField(max_length=100, blank=True, default="")
+    ultimos_4 = models.CharField(max_length=4, blank=True, default="")
+    color = models.CharField(max_length=7, default="#6366F1")  # hex
+    limite_credito = models.DecimalField(max_digits=12, decimal_places=2)
+    limite_mensual = models.DecimalField(max_digits=12, decimal_places=2)
+    corte_dia = models.PositiveSmallIntegerField()     # 1-31
+    pago_dia = models.PositiveSmallIntegerField()      # 1-31
+    activa = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return f"{self.nombre} ···{self.ultimos_4} ({self.owner.username})"
+
+
+class CardExpense(models.Model):
+    """Gasto cargado a una tarjeta de crédito."""
+    card = models.ForeignKey(
+        CreditCard, on_delete=models.CASCADE, related_name="expenses"
+    )
+    descripcion = models.CharField(max_length=255)
+    fecha = models.DateField()
+    monto_total = models.DecimalField(max_digits=12, decimal_places=2)
+    es_msi = models.BooleanField(default=False)
+    meses = models.PositiveSmallIntegerField(default=1)   # 1 = una exhibición
+    # mensualidad se calcula: monto_total / meses
+    pagado = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-created_at"]
+
+    @property
+    def mensualidad(self):
+        if self.meses and self.meses > 0:
+            return round(self.monto_total / self.meses, 2)
+        return self.monto_total
+
+    def __str__(self):
+        msi = f" ({self.meses} MSI)" if self.es_msi else ""
+        return f"{self.descripcion} ${self.monto_total}{msi} — {self.card.nombre}"
+
+
+class CardPayment(models.Model):
+    """Pago realizado a una tarjeta de crédito."""
+    class PaymentType(models.TextChoices):
+        MINIMO = "minimo", "Pago mínimo"
+        TOTAL = "total", "Pago total"
+        PARCIAL = "parcial", "Pago parcial"
+
+    card = models.ForeignKey(
+        CreditCard, on_delete=models.CASCADE, related_name="payments"
+    )
+    fecha = models.DateField()
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+    tipo = models.CharField(
+        max_length=10, choices=PaymentType.choices, default=PaymentType.TOTAL
+    )
+    pago_minimo = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    notas = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha"]
+
+    def __str__(self):
+        return f"{self.card.nombre} — {self.tipo} ${self.monto} ({self.fecha})"
+
+
 class Budget(models.Model):
     """Presupuesto fijo mensual por categoría y usuario."""
     owner = models.ForeignKey(

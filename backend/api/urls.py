@@ -28,4 +28,12 @@ urlpatterns = [
     # Presupuestos
     path('finance/budgets/', views.budgets_list, name='finance-budgets'),
     path('finance/budgets/<int:category_id>/', views.budget_detail, name='finance-budget-detail'),
+    # Tarjetas de crédito
+    path('finance/cards/', views.cards_list, name='finance-cards'),
+    path('finance/cards/<int:pk>/', views.card_detail, name='finance-card-detail'),
+    path('finance/cards/<int:pk>/expenses/', views.card_expenses, name='finance-card-expenses'),
+    path('finance/cards/<int:pk>/expenses/<int:expense_id>/', views.card_expense_detail, name='finance-card-expense-detail'),
+    path('finance/cards/<int:pk>/payments/', views.card_payments, name='finance-card-payments'),
+    path('finance/cards/<int:pk>/payments/<int:payment_id>/', views.card_payment_detail, name='finance-card-payment-detail'),
+    path('finance/cards/<int:pk>/summary/', views.card_summary, name='finance-card-summary'),
 ]

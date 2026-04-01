@@ -6,10 +6,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Budget, Category, Item, Transaction
+from .models import Budget, CardExpense, CardPayment, CreditCard, Category, Item, Transaction
 from .permissions import IsAdminRole
 from .serializers import (
     BudgetSerializer,
+    CardExpenseSerializer,
+    CardPaymentSerializer,
+    CreditCardSerializer,
     CategorySerializer,
     ItemSerializer,
     TransactionSerializer,
@@ -425,3 +428,185 @@ def budget_detail(request, category_id):
     )
     serializer = BudgetSerializer(budget)
     return Response(serializer.data, status=201 if created else 200)
+
+
+# ─── Tarjetas de Crédito ────────────────────────────────────────────────────
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def cards_list(request):
+    """GET: lista de tarjetas del usuario. POST: crear tarjeta."""
+    if request.method == 'GET':
+        cards = CreditCard.objects.filter(owner=request.user)
+        serializer = CreditCardSerializer(cards, many=True)
+        return Response(serializer.data)
+
+    serializer = CreditCardSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save(owner=request.user)
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def card_detail(request, pk):
+    """GET/PUT/DELETE de una tarjeta específica."""
+    card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
+
+    if request.method == 'GET':
+        return Response(CreditCardSerializer(card).data)
+
+    if request.method == 'PUT':
+        serializer = CreditCardSerializer(card, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    card.delete()
+    return Response(status=204)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def card_expenses(request, pk):
+    """GET: gastos de la tarjeta. POST: agregar gasto."""
+    card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
+
+    if request.method == 'GET':
+        expenses = card.expenses.all()
+        serializer = CardExpenseSerializer(expenses, many=True)
+        return Response(serializer.data)
+
+    data = request.data.copy()
+    data['card'] = card.pk
+    serializer = CardExpenseSerializer(data=data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def card_expense_detail(request, pk, expense_id):
+    """PUT/DELETE de un gasto específico de la tarjeta."""
+    card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
+    expense = get_object_or_404(CardExpense, pk=expense_id, card=card)
+
+    if request.method == 'PUT':
+        serializer = CardExpenseSerializer(expense, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    expense.delete()
+    return Response(status=204)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def card_payments(request, pk):
+    """GET: historial de pagos. POST: registrar pago."""
+    card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
+
+    if request.method == 'GET':
+        payments = card.payments.all()
+        serializer = CardPaymentSerializer(payments, many=True)
+        return Response(serializer.data)
+
+    data = request.data.copy()
+    data['card'] = card.pk
+    serializer = CardPaymentSerializer(data=data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def card_payment_detail(request, pk, payment_id):
+    """DELETE de un pago específico."""
+    card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
+    payment = get_object_or_404(CardPayment, pk=payment_id, card=card)
+    payment.delete()
+    return Response(status=204)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def card_summary(request, pk):
+    """Resumen financiero de la tarjeta: saldos, disponible, uso mensual."""
+    import datetime
+    from dateutil.relativedelta import relativedelta
+
+    card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
+    today = datetime.date.today()
+
+    # Calcular inicio y fin del periodo de corte actual
+    # El periodo va desde el día después del último corte hasta el día de corte actual
+    corte_dia = card.corte_dia
+    if today.day <= corte_dia:
+        # Estamos antes del corte → el periodo empezó el mes pasado
+        inicio_periodo = (today.replace(day=1) - relativedelta(months=1)).replace(day=corte_dia + 1)
+        fin_periodo = today.replace(day=corte_dia)
+    else:
+        # Ya pasó el corte → el periodo empezó este mes
+        inicio_periodo = today.replace(day=corte_dia + 1)
+        fin_periodo = (today + relativedelta(months=1)).replace(day=corte_dia)
+
+    # Gastos del periodo actual (por fecha)
+    expenses_periodo = card.expenses.filter(
+        fecha__gte=inicio_periodo,
+        fecha__lte=fin_periodo,
+    )
+
+    # Saldo total (todos los gastos no pagados — afecta tope de crédito)
+    saldo_total = float(
+        card.expenses.filter(pagado=False).aggregate(
+            total=Sum('monto_total')
+        )['total'] or 0
+    )
+
+    # Mensualidades del periodo (afecta límite mensual)
+    mensualidades_periodo = sum(
+        float(e.mensualidad) for e in expenses_periodo.filter(pagado=False)
+    )
+
+    disponible = float(card.limite_credito) - saldo_total
+    pct_credito = round(saldo_total / float(card.limite_credito) * 100, 1) if card.limite_credito else 0
+    pct_mensual = round(mensualidades_periodo / float(card.limite_mensual) * 100, 1) if card.limite_mensual else 0
+
+    # Próximas fechas
+    if today.day <= corte_dia:
+        prox_corte = today.replace(day=corte_dia)
+    else:
+        prox_corte = (today + relativedelta(months=1)).replace(day=corte_dia)
+
+    pago_dia = card.pago_dia
+    if prox_corte.day < pago_dia:
+        prox_pago = prox_corte.replace(day=pago_dia)
+    else:
+        prox_pago = (prox_corte + relativedelta(months=1)).replace(day=pago_dia)
+
+    dias_para_corte = (prox_corte - today).days
+
+    return Response({
+        'card': CreditCardSerializer(card).data,
+        'saldo_total': saldo_total,
+        'disponible': disponible,
+        'limite_credito': float(card.limite_credito),
+        'limite_mensual': float(card.limite_mensual),
+        'mensualidades_periodo': mensualidades_periodo,
+        'pct_credito': pct_credito,
+        'pct_mensual': pct_mensual,
+        'prox_corte': prox_corte.isoformat(),
+        'prox_pago': prox_pago.isoformat(),
+        'dias_para_corte': dias_para_corte,
+        'inicio_periodo': inicio_periodo.isoformat(),
+        'fin_periodo': fin_periodo.isoformat(),
+        'gastos_periodo': CardExpenseSerializer(expenses_periodo, many=True).data,
+    })

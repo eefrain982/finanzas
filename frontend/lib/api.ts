@@ -195,3 +195,131 @@ export async function deleteBudget(categoryId: number): Promise<void> {
   });
   if (!res.ok) throw new Error("Error al eliminar presupuesto");
 }
+
+// ─── Tarjetas de Crédito ─────────────────────────────────────────────────────
+
+import type {
+  CreditCard,
+  CreditCardFormData,
+  CardExpense,
+  CardExpenseFormData,
+  CardPayment,
+  CardPaymentFormData,
+  CardSummary,
+} from "@/types/finance";
+
+export async function getCards(): Promise<CreditCard[]> {
+  const res = await apiFetch("/finance/cards/");
+  if (!res.ok) throw new Error("Error al cargar tarjetas");
+  return res.json();
+}
+
+export async function createCard(data: CreditCardFormData): Promise<CreditCard> {
+  const res = await apiFetch("/finance/cards/", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(JSON.stringify(err));
+  }
+  return res.json();
+}
+
+export async function updateCard(
+  id: number,
+  data: Partial<CreditCardFormData>
+): Promise<CreditCard> {
+  const res = await apiFetch(`/finance/cards/${id}/`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Error al actualizar tarjeta");
+  return res.json();
+}
+
+export async function deleteCard(id: number): Promise<void> {
+  const res = await apiFetch(`/finance/cards/${id}/`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Error al eliminar tarjeta");
+}
+
+export async function getCardSummary(id: number): Promise<CardSummary> {
+  const res = await apiFetch(`/finance/cards/${id}/summary/`);
+  if (!res.ok) throw new Error("Error al cargar resumen de tarjeta");
+  return res.json();
+}
+
+export async function getCardExpenses(id: number): Promise<CardExpense[]> {
+  const res = await apiFetch(`/finance/cards/${id}/expenses/`);
+  if (!res.ok) throw new Error("Error al cargar gastos de tarjeta");
+  return res.json();
+}
+
+export async function createCardExpense(
+  cardId: number,
+  data: CardExpenseFormData
+): Promise<CardExpense> {
+  const res = await apiFetch(`/finance/cards/${cardId}/expenses/`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(JSON.stringify(err));
+  }
+  return res.json();
+}
+
+export async function updateCardExpense(
+  cardId: number,
+  expenseId: number,
+  data: Partial<CardExpenseFormData>
+): Promise<CardExpense> {
+  const res = await apiFetch(`/finance/cards/${cardId}/expenses/${expenseId}/`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Error al actualizar gasto");
+  return res.json();
+}
+
+export async function deleteCardExpense(
+  cardId: number,
+  expenseId: number
+): Promise<void> {
+  const res = await apiFetch(`/finance/cards/${cardId}/expenses/${expenseId}/`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Error al eliminar gasto");
+}
+
+export async function getCardPayments(id: number): Promise<CardPayment[]> {
+  const res = await apiFetch(`/finance/cards/${id}/payments/`);
+  if (!res.ok) throw new Error("Error al cargar pagos");
+  return res.json();
+}
+
+export async function createCardPayment(
+  cardId: number,
+  data: CardPaymentFormData
+): Promise<CardPayment> {
+  const res = await apiFetch(`/finance/cards/${cardId}/payments/`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(JSON.stringify(err));
+  }
+  return res.json();
+}
+
+export async function deleteCardPayment(
+  cardId: number,
+  paymentId: number
+): Promise<void> {
+  const res = await apiFetch(`/finance/cards/${cardId}/payments/${paymentId}/`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Error al eliminar pago");
+}
