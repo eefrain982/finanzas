@@ -6,6 +6,10 @@ Uso dentro del contenedor:
 
 O desde el host:
     docker exec -i personal_backend_1 python manage.py shell < seed.py
+
+Tarjetas incluidas:
+  1. RappiCard (Banorte) — datos REALES, 2 periodos históricos + periodo abierto
+  2-5. Tarjetas ficticias de ejemplo
 """
 
 import datetime
@@ -99,9 +103,224 @@ if RESET_CARDS:
     print("🗑️  Tarjetas anteriores eliminadas.")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TARJETA 1 — Corte 12, pago últimos días (día 5 del mes siguiente = día 5)
+# TARJETA 1 — RappiCard (Banorte) — DATOS REALES
+# Corte día 15, pago día 9
 # ══════════════════════════════════════════════════════════════════════════════
-c1 = CreditCard.objects.create(
+rappi = CreditCard.objects.create(
+    owner=user,
+    nombre="RappiCard",
+    banco="Banorte",
+    ultimos_4="9982",
+    color="#FF441A",  # naranja Rappi
+    limite_credito=Decimal("25000"),
+    limite_mensual=Decimal("25000"),
+    corte_dia=15,
+    pago_dia=9,
+    activa=True,
+)
+print(f"✅ Tarjeta creada: {rappi.nombre}")
+
+# ── Gastos que atraviesan múltiples periodos (MSI / diferidos) ────────────────
+# Se crean una sola vez con el mes_actual al día de hoy (periodo abierto)
+
+# Saldo Diferido — inicio may-25, 12 meses → mes 11 en periodo feb-mar
+g_diferido = CardExpense.objects.create(
+    card=rappi,
+    descripcion="Saldo Diferido",
+    fecha=datetime.date(2025, 5, 4),
+    monto_total=Decimal("11850.65"),
+    es_msi=False,
+    meses=12,
+    mes_actual=11,   # mes 11 al corte de feb-15
+    pagado=False,
+)
+
+# MERCADO PAGO 1 — jun-25, 9 MSI → mes 9/9 en feb (último, se pagará)
+g_merpago1 = CardExpense.objects.create(
+    card=rappi,
+    descripcion="MERCADO PAGO 1",
+    fecha=datetime.date(2025, 6, 6),
+    monto_total=Decimal("9859.32"),
+    es_msi=True,
+    meses=9,
+    mes_actual=9,    # último mes en periodo ene-feb
+    pagado=False,
+)
+
+# RESTA BAR SAN LUIS — jul-25, 12 meses → mes 8 en periodo feb-mar
+g_resta_bar = CardExpense.objects.create(
+    card=rappi,
+    descripcion="RESTA BAR SAN LUIS",
+    fecha=datetime.date(2025, 7, 24),
+    monto_total=Decimal("1155.00"),
+    es_msi=False,
+    meses=12,
+    mes_actual=8,
+    pagado=False,
+)
+
+# USFUEL PISTOLAS meses — jul-25, 12 meses → mes 8 en periodo feb-mar
+g_usfuel_msi = CardExpense.objects.create(
+    card=rappi,
+    descripcion="USFUEL PISTOLAS (meses)",
+    fecha=datetime.date(2025, 7, 24),
+    monto_total=Decimal("800.00"),
+    es_msi=False,
+    meses=12,
+    mes_actual=8,
+    pagado=False,
+)
+
+# MERPAGO 2 PRODUCTOS — sep-25, 9 MSI → mes 7 en periodo feb-mar
+g_merpago2 = CardExpense.objects.create(
+    card=rappi,
+    descripcion="MERPAGO 2 PRODUCTOS",
+    fecha=datetime.date(2025, 9, 4),
+    monto_total=Decimal("1650.55"),
+    es_msi=True,
+    meses=9,
+    mes_actual=7,
+    pagado=False,
+)
+
+# MERPAGO MERCADOLIBRE — oct-25, 6 MSI → mes 5 en periodo feb-mar
+g_merpago_ml = CardExpense.objects.create(
+    card=rappi,
+    descripcion="MERPAGO MERCADOLIBRE",
+    fecha=datetime.date(2025, 10, 24),
+    monto_total=Decimal("2160.48"),
+    es_msi=True,
+    meses=6,
+    mes_actual=5,
+    pagado=False,
+)
+
+# MERPAGO SONYMEXICO — dic-25, 12 MSI → mes 4 en periodo feb-mar
+g_sony = CardExpense.objects.create(
+    card=rappi,
+    descripcion="MERPAGO SONYMEXICO",
+    fecha=datetime.date(2025, 12, 11),
+    monto_total=Decimal("4999.00"),
+    es_msi=True,
+    meses=12,
+    mes_actual=4,
+    pagado=False,
+)
+
+# GOB EDO DE CHIHUAHUA — ene-26, 3 meses → mes 3/3 en periodo feb-mar (último)
+g_gob = CardExpense.objects.create(
+    card=rappi,
+    descripcion="GOB EDO DE CHIHUAHUA",
+    fecha=datetime.date(2026, 1, 15),
+    monto_total=Decimal("9192.00"),
+    es_msi=False,
+    meses=3,
+    mes_actual=3,   # último mes en periodo feb-mar
+    pagado=False,
+)
+
+# ── PERIODO 1: ene 16 – feb 15, 2026 (PAGADO) ────────────────────────────────
+p1_inicio = datetime.date(2026, 1, 16)
+p1_fin    = datetime.date(2026, 2, 15)
+p1_fpl    = datetime.date(2026, 3, 9)
+
+cargos_p1_normales = [
+    ("OXXO DEPORTISTAS",      "102.00",   datetime.date(2026, 2,  9)),
+    ("GAS ECONOMICO",         "175.00",   datetime.date(2026, 2,  9)),
+    ("OXXO COLON",             "70.00",   datetime.date(2026, 2, 10)),
+    ("USFUEL PISTOLAS",      "1000.00",   datetime.date(2026, 2, 10)),
+    ("FERRETERIA SALVAL",     "140.00",   datetime.date(2026, 2, 10)),
+    ("NAYAXX1 NAYAX RUTA 4",   "25.00",   datetime.date(2026, 2, 11)),
+    ("COM RAP BUFFALUC CAFET", "125.00",  datetime.date(2026, 2, 11)),
+    ("REST SEKORI",           "185.00",   datetime.date(2026, 2, 11)),
+    ("ROCKO BARBER STORE",    "330.00",   datetime.date(2026, 2, 14)),
+]
+
+gastos_p1 = []
+for (desc, monto, fecha) in cargos_p1_normales:
+    g = CardExpense.objects.create(
+        card=rappi, descripcion=desc, fecha=fecha,
+        monto_total=Decimal(monto),
+        es_msi=False, meses=1, mes_actual=1, pagado=True,
+    )
+    gastos_p1.append(g)
+
+# Los MSI/diferidos que aparecen en este periodo (con sus mes_actual del periodo 1)
+# Creamos versiones "históricas" de los gastos recurrentes para el cálculo del saldo
+# El saldo real del estado de cuenta fue $21,357.22
+stmt_p1 = CardStatement.objects.create(
+    card=rappi,
+    inicio=p1_inicio,
+    fin=p1_fin,
+    fecha_pago_limite=p1_fpl,
+    saldo_total=Decimal("21357.22"),
+    mensualidades=Decimal("21357.22"),  # todo era mensualidades/cargos
+    pago_minimo=Decimal("5322.81"),
+    estado="pagado",
+    pagado_en=datetime.date(2026, 2, 28),
+    monto_pagado=Decimal("21357.22"),
+    notas_pago="Pago total periodo ene-feb",
+)
+print(f"   📄 Periodo {p1_inicio}→{p1_fin} creado y pagado  (saldo real: $21,357.22)")
+
+# ── PERIODO 2: feb 16 – mar 15, 2026 (CERRADO — pendiente de pago) ────────────
+p2_inicio = datetime.date(2026, 2, 16)
+p2_fin    = datetime.date(2026, 3, 15)
+p2_fpl    = datetime.date(2026, 4, 6)
+
+cargos_p2_normales = [
+    ("PANORAMA AZOTEA BAR",    "615.25",  datetime.date(2026, 2, 21)),
+    ("ABTS EL SEMILLERO",       "94.00",  datetime.date(2026, 2, 22)),
+    ("ABTS EL SEMILLERO",       "95.00",  datetime.date(2026, 2, 22)),
+    ("OXXO VALLARTA",           "18.50",  datetime.date(2026, 2, 22)),
+    ("REST MONT DU LAC",       "495.00",  datetime.date(2026, 2, 22)),
+    ("REST SAMARA A ORTIZ M",  "325.00",  datetime.date(2026, 2, 23)),
+    ("TACOS Y MONTADOS LA JU", "427.00",  datetime.date(2026, 2, 24)),
+    ("USFUEL PISTOLAS",        "839.65",  datetime.date(2026, 2, 26)),
+    ("ROCKO BARBER STORE",     "530.00",  datetime.date(2026, 2, 26)),
+    ("DOGOS CHIHUAS",           "90.00",  datetime.date(2026, 2, 26)),
+    ("BONZU",                  "554.00",  datetime.date(2026, 3,  6)),
+    ("ALSUPER CAROLINAS",      "282.80",  datetime.date(2026, 3,  7)),
+    ("CLIP MX REST ESSCC",     "385.00",  datetime.date(2026, 3,  7)),
+    ("ABTS EL SEMILLERO",       "36.00",  datetime.date(2026, 3,  7)),
+    ("REFACC EL PROFE",        "480.00",  datetime.date(2026, 3,  7)),
+    ("Rappi",                  "200.00",  datetime.date(2026, 3,  7)),
+]
+
+gastos_p2 = []
+for (desc, monto, fecha) in cargos_p2_normales:
+    g = CardExpense.objects.create(
+        card=rappi, descripcion=desc, fecha=fecha,
+        monto_total=Decimal(monto),
+        es_msi=False, meses=1, mes_actual=1, pagado=False,
+    )
+    gastos_p2.append(g)
+
+# Statement cerrado con saldo real
+stmt_p2 = CardStatement.objects.create(
+    card=rappi,
+    inicio=p2_inicio,
+    fin=p2_fin,
+    fecha_pago_limite=p2_fpl,
+    saldo_total=Decimal("17639.86"),
+    mensualidades=Decimal("17639.86"),
+    pago_minimo=Decimal("5307.43"),
+    estado="cerrado",
+    pagado_en=None,
+    monto_pagado=None,
+    notas_pago="",
+)
+print(f"   📄 Periodo {p2_inicio}→{p2_fin} creado — CERRADO pendiente de pago  (saldo real: $17,639.86)")
+
+# ── PERIODO 3 (abierto): mar 16 – abr 15, 2026 ───────────────────────────────
+p3_stmt = create_open_statement(rappi, rappi.pago_dia)
+print(f"   📄 Periodo abierto actual creado  ({p3_stmt.inicio}→{p3_stmt.fin})\n")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TARJETA 2 — BBVA Azul (ficticia)
+# ══════════════════════════════════════════════════════════════════════════════
+c2 = CreditCard.objects.create(
     owner=user,
     nombre="BBVA Azul",
     banco="BBVA",
@@ -113,200 +332,46 @@ c1 = CreditCard.objects.create(
     pago_dia=5,
     activa=True,
 )
-print(f"✅ Tarjeta creada: {c1.nombre}")
-
-# Meses: nov-25 → mar-26  (5 periodos cerrados+pagados, 1 abierto)
-PERIODOS_C1 = [
-    # (año, mes_corte)  → periodo cuyo corte cae ese mes
-    (2025, 11),
-    (2025, 12),
-    (2026,  1),
-    (2026,  2),
-    (2026,  3),
-]
-
-gastos_c1_plantilla = [
-    # (descripcion, monto_total, dia_del_mes, es_msi, meses)
-    ("Netflix",          199,  3, False, 1),
-    ("Spotify",          129,  3, False, 1),
-    ("Gasolina",         800,  7, False, 1),
-    ("Despensa Walmart", 1500, 9, False, 1),
-    ("Restaurante",      600,  5, False, 1),
-    ("Amazon compra",    450,  6, False, 1),
-]
-
-# Compra MSI que se inicia en nov-25 a 6 meses
-msi_c1 = CardExpense.objects.create(
-    card=c1,
-    descripcion="MacBook Air 6 MSI",
-    fecha=datetime.date(2025, 11, 8),
-    monto_total=Decimal("18000"),
-    es_msi=True,
-    meses=6,
-    mes_actual=6,   # ya completado al llegar a hoy
-    pagado=True,
-)
-
-for (año, mes) in PERIODOS_C1:
-    inicio, fin = period_start(c1.corte_dia, año, mes)
-    gastos_periodo = []
-    for (desc, monto, dia, es_msi, meses) in gastos_c1_plantilla:
-        try:
-            fecha_gasto = inicio.replace(day=dia) + relativedelta(days=15)
-        except ValueError:
-            fecha_gasto = inicio + relativedelta(days=14)
-        # Asegurar que la fecha cae en el periodo
-        if fecha_gasto > fin:
-            fecha_gasto = fin - datetime.timedelta(days=2)
-        g = CardExpense.objects.create(
-            card=c1,
-            descripcion=f"{desc} {fin.strftime('%b %y')}",
-            fecha=fecha_gasto,
-            monto_total=Decimal(str(monto)),
-            es_msi=False,
-            meses=1,
-            mes_actual=1,
-            pagado=True,
-        )
-        gastos_periodo.append(g)
-
-    # Añadir mensualidad MSI al saldo
-    gastos_periodo.append(msi_c1)
-
-    paid_date = fin + datetime.timedelta(days=10)
-    create_statement_closed_and_paid(c1, inicio, fin, c1.pago_dia, gastos_periodo, paid_date)
-    print(f"   📄 Periodo {inicio}→{fin} creado y pagado")
-
-# Gastos del periodo abierto actual (gastos no pagados)
-inicio_act, fin_act, _ = make_period(c1.corte_dia, c1.pago_dia, today)
-gastos_abiertos_c1 = [
-    ("Netflix",          199,  False, 1),
-    ("Spotify",          129,  False, 1),
-    ("Gasolina",         750,  False, 1),
-    ("Despensa Chedraui", 1200, False, 1),
-    ("Laptop HP 12 MSI", 14400, True, 12),
-]
-for (desc, monto, es_msi, meses) in gastos_abiertos_c1:
-    fecha_g = min(inicio_act + datetime.timedelta(days=5), today)
-    if es_msi:
-        meses_val = meses
-    else:
-        meses_val = 1
-    CardExpense.objects.create(
-        card=c1,
-        descripcion=desc,
-        fecha=fecha_g,
-        monto_total=Decimal(str(monto)),
-        es_msi=es_msi,
-        meses=meses_val,
-        mes_actual=1,
-        pagado=False,
-    )
-
-create_open_statement(c1, c1.pago_dia)
-print(f"   📄 Periodo abierto actual creado\n")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TARJETA 2 — Corte 16, pago primeros días (día 3)
-# ══════════════════════════════════════════════════════════════════════════════
-c2 = CreditCard.objects.create(
-    owner=user,
-    nombre="Banorte Oro",
-    banco="Banorte",
-    ultimos_4="8876",
-    color="#F59E0B",
-    limite_credito=Decimal("30000"),
-    limite_mensual=Decimal("12000"),
-    corte_dia=16,
-    pago_dia=3,
-    activa=True,
-)
 print(f"✅ Tarjeta creada: {c2.nombre}")
 
-PERIODOS_C2 = [
-    (2025, 11),
-    (2025, 12),
-    (2026,  1),
-    (2026,  2),
-    (2026,  3),
-]
-
-gastos_c2_plantilla = [
-    ("Gasolina Premium",  950,  False),
-    ("CFE Electricidad", 1200,  False),
-    ("TELMEX Internet",   499,  False),
-    ("Gym Mensualidad",   600,  False),
-    ("Farmacia",          380,  False),
-    ("Cine y palomitas",  450,  False),
-    ("Ropa Liverpool",   1800,  False),
-]
-
-# MSI: iPhone 24 meses, inicia dic-25
-msi_c2 = CardExpense.objects.create(
-    card=c2,
-    descripcion="iPhone 15 Pro 24 MSI",
-    fecha=datetime.date(2025, 12, 5),
-    monto_total=Decimal("28800"),
-    es_msi=True,
-    meses=24,
-    mes_actual=4,   # dic/ene/feb/mar pagados
-    pagado=False,
-)
-
+PERIODOS_C2 = [(2025, 11), (2025, 12), (2026, 1), (2026, 2), (2026, 3)]
 for (año, mes) in PERIODOS_C2:
     inicio, fin = period_start(c2.corte_dia, año, mes)
     gastos_periodo = []
-    for i, (desc, monto, es_msi) in enumerate(gastos_c2_plantilla):
-        fecha_gasto = inicio + datetime.timedelta(days=5 + i * 2)
-        if fecha_gasto > fin:
-            fecha_gasto = fin - datetime.timedelta(days=1)
+    for i, (desc, monto) in enumerate([
+        ("Netflix", 199), ("Spotify", 129), ("Gasolina", 800),
+        ("Despensa Walmart", 1500), ("Restaurante", 600),
+    ]):
+        fecha_g = inicio + datetime.timedelta(days=3 + i * 4)
+        if fecha_g > fin:
+            fecha_g = fin - datetime.timedelta(days=1)
         g = CardExpense.objects.create(
-            card=c2,
-            descripcion=f"{desc} {fin.strftime('%b %y')}",
-            fecha=fecha_gasto,
-            monto_total=Decimal(str(monto)),
-            es_msi=False,
-            meses=1,
-            mes_actual=1,
-            pagado=True,
+            card=c2, descripcion=f"{desc} {fin.strftime('%b %y')}",
+            fecha=fecha_g, monto_total=Decimal(str(monto)),
+            es_msi=False, meses=1, mes_actual=1, pagado=True,
         )
         gastos_periodo.append(g)
-
-    if año > 2025 or mes == 12:   # MSI aplica a partir de dic
-        gastos_periodo.append(msi_c2)
-
-    paid_date = fin + datetime.timedelta(days=7)
-    create_statement_closed_and_paid(c2, inicio, fin, c2.pago_dia, gastos_periodo, paid_date)
+    paid = fin + datetime.timedelta(days=10)
+    create_statement_closed_and_paid(c2, inicio, fin, c2.pago_dia, gastos_periodo, paid)
     print(f"   📄 Periodo {inicio}→{fin} creado y pagado")
 
-# Periodo abierto c2
-inicio_act2, fin_act2, _ = make_period(c2.corte_dia, c2.pago_dia, today)
-gastos_abiertos_c2 = [
-    ("Gasolina Premium",  950,  False, 1),
-    ("TELMEX Internet",   499,  False, 1),
-    ("Gym Mensualidad",   600,  False, 1),
-    ("Smart TV LG 6 MSI", 9600, True,  6),
-]
-for (desc, monto, es_msi, meses) in gastos_abiertos_c2:
-    fecha_g = min(inicio_act2 + datetime.timedelta(days=4), today)
+inicio_c2, _, _ = make_period(c2.corte_dia, c2.pago_dia, today)
+for (desc, monto, es_msi, meses) in [
+    ("Netflix", 199, False, 1), ("Spotify", 129, False, 1),
+    ("Gasolina", 850, False, 1), ("Laptop HP 12 MSI", 14400, True, 12),
+]:
+    fecha_g = min(inicio_c2 + datetime.timedelta(days=4), today)
     CardExpense.objects.create(
-        card=c2,
-        descripcion=desc,
-        fecha=fecha_g,
+        card=c2, descripcion=desc, fecha=fecha_g,
         monto_total=Decimal(str(monto)),
-        es_msi=es_msi,
-        meses=meses,
-        mes_actual=1,
-        pagado=False,
+        es_msi=es_msi, meses=meses, mes_actual=1, pagado=False,
     )
-
 create_open_statement(c2, c2.pago_dia)
 print(f"   📄 Periodo abierto actual creado\n")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TARJETA 3 — Corte 25, pago día 15
+# TARJETA 3 — HSBC Platinum (ficticia)
 # ══════════════════════════════════════════════════════════════════════════════
 c3 = CreditCard.objects.create(
     owner=user,
@@ -323,23 +388,19 @@ c3 = CreditCard.objects.create(
 print(f"✅ Tarjeta creada: {c3.nombre}")
 
 PERIODOS_C3 = [(2025, 11), (2025, 12), (2026, 1), (2026, 2), (2026, 3)]
-
 for (año, mes) in PERIODOS_C3:
     inicio, fin = period_start(c3.corte_dia, año, mes)
     gastos_periodo = []
-    plantilla_c3 = [
+    for i, (desc, monto) in enumerate([
         ("Vuelo aéreo", 4500), ("Hotel", 3200), ("Uber Eats", 350),
         ("Suscripción Adobe", 890), ("Amazon Prime", 299),
-    ]
-    for i, (desc, monto) in enumerate(plantilla_c3):
-        fecha_gasto = inicio + datetime.timedelta(days=3 + i * 4)
-        if fecha_gasto > fin:
-            fecha_gasto = fin - datetime.timedelta(days=1)
+    ]):
+        fecha_g = inicio + datetime.timedelta(days=3 + i * 4)
+        if fecha_g > fin:
+            fecha_g = fin - datetime.timedelta(days=1)
         g = CardExpense.objects.create(
-            card=c3,
-            descripcion=f"{desc} {fin.strftime('%b %y')}",
-            fecha=fecha_gasto,
-            monto_total=Decimal(str(monto)),
+            card=c3, descripcion=f"{desc} {fin.strftime('%b %y')}",
+            fecha=fecha_g, monto_total=Decimal(str(monto)),
             es_msi=False, meses=1, mes_actual=1, pagado=True,
         )
         gastos_periodo.append(g)
@@ -347,25 +408,23 @@ for (año, mes) in PERIODOS_C3:
     create_statement_closed_and_paid(c3, inicio, fin, c3.pago_dia, gastos_periodo, paid)
     print(f"   📄 Periodo {inicio}→{fin} creado y pagado")
 
-inicio_act3, _, _ = make_period(c3.corte_dia, c3.pago_dia, today)
+inicio_c3, _, _ = make_period(c3.corte_dia, c3.pago_dia, today)
 for (desc, monto, es_msi, meses) in [
-    ("Uber Eats", 420, False, 1),
-    ("Suscripción Adobe", 890, False, 1),
+    ("Uber Eats", 420, False, 1), ("Suscripción Adobe", 890, False, 1),
     ("Consola PS5 18 MSI", 12600, True, 18),
 ]:
-    fecha_g = min(inicio_act3 + datetime.timedelta(days=3), today)
+    fecha_g = min(inicio_c3 + datetime.timedelta(days=3), today)
     CardExpense.objects.create(
         card=c3, descripcion=desc, fecha=fecha_g,
         monto_total=Decimal(str(monto)),
         es_msi=es_msi, meses=meses, mes_actual=1, pagado=False,
     )
-
 create_open_statement(c3, c3.pago_dia)
 print(f"   📄 Periodo abierto actual creado\n")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TARJETA 4 — Corte 5, pago día 25 — casi siempre al tope
+# TARJETA 4 — Santander Zero (ficticia)
 # ══════════════════════════════════════════════════════════════════════════════
 c4 = CreditCard.objects.create(
     owner=user,
@@ -388,14 +447,12 @@ for (año, mes) in PERIODOS_C4:
     for i, (desc, monto) in enumerate([
         ("Mercado", 2500), ("Gasolina", 700), ("Ropa", 1800), ("Farmacia", 450),
     ]):
-        fecha_gasto = inicio + datetime.timedelta(days=2 + i * 5)
-        if fecha_gasto > fin:
-            fecha_gasto = fin - datetime.timedelta(days=1)
+        fecha_g = inicio + datetime.timedelta(days=2 + i * 5)
+        if fecha_g > fin:
+            fecha_g = fin - datetime.timedelta(days=1)
         g = CardExpense.objects.create(
-            card=c4,
-            descripcion=f"{desc} {fin.strftime('%b %y')}",
-            fecha=fecha_gasto,
-            monto_total=Decimal(str(monto)),
+            card=c4, descripcion=f"{desc} {fin.strftime('%b %y')}",
+            fecha=fecha_g, monto_total=Decimal(str(monto)),
             es_msi=False, meses=1, mes_actual=1, pagado=True,
         )
         gastos_periodo.append(g)
@@ -403,21 +460,20 @@ for (año, mes) in PERIODOS_C4:
     create_statement_closed_and_paid(c4, inicio, fin, c4.pago_dia, gastos_periodo, paid)
     print(f"   📄 Periodo {inicio}→{fin} creado y pagado")
 
-inicio_act4, _, _ = make_period(c4.corte_dia, c4.pago_dia, today)
+inicio_c4, _, _ = make_period(c4.corte_dia, c4.pago_dia, today)
 for (desc, monto) in [("Mercado", 2800), ("Gasolina", 650), ("Farmacia", 380)]:
-    fecha_g = min(inicio_act4 + datetime.timedelta(days=2), today)
+    fecha_g = min(inicio_c4 + datetime.timedelta(days=2), today)
     CardExpense.objects.create(
         card=c4, descripcion=desc, fecha=fecha_g,
         monto_total=Decimal(str(monto)),
         es_msi=False, meses=1, mes_actual=1, pagado=False,
     )
-
 create_open_statement(c4, c4.pago_dia)
 print(f"   📄 Periodo abierto actual creado\n")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TARJETA 5 — Corte 20, pago día 10 — viajes y entretenimiento
+# TARJETA 5 — Citibanamex Rewards (ficticia)
 # ══════════════════════════════════════════════════════════════════════════════
 c5 = CreditCard.objects.create(
     owner=user,
@@ -441,14 +497,12 @@ for (año, mes) in PERIODOS_C5:
         ("Vuelo CDMX-CUN", 5500), ("Hotel Cancún", 4200),
         ("Tours", 1800), ("Restaurantes viaje", 2100), ("Souvenirs", 900),
     ]):
-        fecha_gasto = inicio + datetime.timedelta(days=3 + i * 3)
-        if fecha_gasto > fin:
-            fecha_gasto = fin - datetime.timedelta(days=1)
+        fecha_g = inicio + datetime.timedelta(days=3 + i * 3)
+        if fecha_g > fin:
+            fecha_g = fin - datetime.timedelta(days=1)
         g = CardExpense.objects.create(
-            card=c5,
-            descripcion=f"{desc} {fin.strftime('%b %y')}",
-            fecha=fecha_gasto,
-            monto_total=Decimal(str(monto)),
+            card=c5, descripcion=f"{desc} {fin.strftime('%b %y')}",
+            fecha=fecha_g, monto_total=Decimal(str(monto)),
             es_msi=False, meses=1, mes_actual=1, pagado=True,
         )
         gastos_periodo.append(g)
@@ -456,30 +510,31 @@ for (año, mes) in PERIODOS_C5:
     create_statement_closed_and_paid(c5, inicio, fin, c5.pago_dia, gastos_periodo, paid)
     print(f"   📄 Periodo {inicio}→{fin} creado y pagado")
 
-inicio_act5, _, _ = make_period(c5.corte_dia, c5.pago_dia, today)
+inicio_c5, _, _ = make_period(c5.corte_dia, c5.pago_dia, today)
 for (desc, monto, es_msi, meses) in [
-    ("Vuelo vacaciones", 7200, False, 1),
-    ("Hotel reserva", 5600, False, 1),
+    ("Vuelo vacaciones", 7200, False, 1), ("Hotel reserva", 5600, False, 1),
     ("Cámara Sony 9 MSI", 13500, True, 9),
 ]:
-    fecha_g = min(inicio_act5 + datetime.timedelta(days=4), today)
+    fecha_g = min(inicio_c5 + datetime.timedelta(days=4), today)
     CardExpense.objects.create(
         card=c5, descripcion=desc, fecha=fecha_g,
         monto_total=Decimal(str(monto)),
         es_msi=es_msi, meses=meses, mes_actual=1, pagado=False,
     )
-
 create_open_statement(c5, c5.pago_dia)
 print(f"   📄 Periodo abierto actual creado\n")
 
 
 # ─── Resumen ──────────────────────────────────────────────────────────────────
-print("=" * 55)
+print("=" * 60)
 print("✅ SEED completado")
 print(f"   Tarjetas creadas : {CreditCard.objects.filter(owner=user).count()}")
 print(f"   Gastos creados   : {CardExpense.objects.filter(card__owner=user).count()}")
 print(f"   Statements       : {CardStatement.objects.filter(card__owner=user).count()}")
 stmts = CardStatement.objects.filter(card__owner=user)
 for s in stmts.order_by("card__nombre", "fin"):
-    print(f"   [{s.estado:8s}] {s.card.nombre:22s}  {s.inicio}→{s.fin}")
-print("=" * 55)
+    saldo = f"${s.saldo_total:,.2f}" if s.saldo_total else "—"
+    print(f"   [{s.estado:8s}] {s.card.nombre:22s}  {s.inicio}→{s.fin}  {saldo}")
+print("=" * 60)
+
+
