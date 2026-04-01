@@ -88,6 +88,7 @@ export interface CardExpense {
   monto_total: string;
   es_msi: boolean;
   meses: number;
+  mes_actual: number;
   mensualidad: string;
   pagado: boolean;
   created_at: string;
@@ -148,5 +149,33 @@ export interface CardPaymentFormData {
   monto: string;
   tipo: CardPaymentType;
   pago_minimo: string;
+  notas: string;
+}
+
+// ─── Estado de Cuenta (CardStatement) ────────────────────────────────────────
+
+export type StatementStatus = "abierto" | "cerrado" | "pagado";
+
+export interface CardStatement {
+  id: number;
+  card: number;
+  inicio: string;
+  fin: string;
+  fecha_pago_limite: string;
+  saldo_total: string;
+  mensualidades: string;
+  pago_minimo: string | null;
+  estado: StatementStatus;
+  pagado_en: string | null;
+  monto_pagado: string | null;
+  notas_pago: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StatementPayFormData {
+  monto: string;
+  tipo: "total" | "minimo" | "parcial";
+  fecha: string;
   notas: string;
 }

@@ -140,6 +140,7 @@ class CardExpense(models.Model):
     monto_total = models.DecimalField(max_digits=12, decimal_places=2)
     es_msi = models.BooleanField(default=False)
     meses = models.PositiveSmallIntegerField(default=1)   # 1 = una exhibición
+    mes_actual = models.PositiveSmallIntegerField(default=1)  # mensualidad en curso
     # mensualidad se calcula: monto_total / meses
     pagado = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -184,6 +185,50 @@ class CardPayment(models.Model):
 
     def __str__(self):
         return f"{self.card.nombre} — {self.tipo} ${self.monto} ({self.fecha})"
+
+
+class CardStatement(models.Model):
+    """Estado de cuenta de un periodo de una tarjeta de crédito."""
+
+    class StatementStatus(models.TextChoices):
+        ABIERTO = "abierto", "Abierto"
+        CERRADO = "cerrado", "Cerrado — pendiente de pago"
+        PAGADO  = "pagado",  "Pagado"
+
+    card               = models.ForeignKey(
+        CreditCard, on_delete=models.CASCADE, related_name="statements"
+    )
+    inicio             = models.DateField()          # primer día del periodo
+    fin                = models.DateField()          # fecha de corte
+    fecha_pago_limite  = models.DateField()          # último día para pagar
+    saldo_total        = models.DecimalField(        # calculado al cerrar
+        max_digits=12, decimal_places=2, default=0
+    )
+    mensualidades      = models.DecimalField(        # suma de mensualidades MSI
+        max_digits=12, decimal_places=2, default=0
+    )
+    pago_minimo        = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    estado             = models.CharField(
+        max_length=10, choices=StatementStatus.choices, default=StatementStatus.ABIERTO
+    )
+    # Campos del pago (se llenan al pagarlo)
+    pagado_en          = models.DateField(null=True, blank=True)
+    monto_pagado       = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    notas_pago         = models.CharField(max_length=255, blank=True, default="")
+    created_at         = models.DateTimeField(auto_now_add=True)
+    updated_at         = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-fin"]
+        # Solo un estado de cuenta abierto o cerrado por tarjeta a la vez
+        # (los pagados pueden ser muchos)
+
+    def __str__(self):
+        return f"{self.card.nombre} | {self.inicio}→{self.fin} [{self.estado}]"
 
 
 class Budget(models.Model):

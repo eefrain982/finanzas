@@ -36,4 +36,8 @@ urlpatterns = [
     path('finance/cards/<int:pk>/payments/', views.card_payments, name='finance-card-payments'),
     path('finance/cards/<int:pk>/payments/<int:payment_id>/', views.card_payment_detail, name='finance-card-payment-detail'),
     path('finance/cards/<int:pk>/summary/', views.card_summary, name='finance-card-summary'),
+    # Estados de cuenta
+    path('finance/cards/<int:pk>/statements/', views.card_statements, name='finance-card-statements'),
+    path('finance/cards/<int:pk>/statements/close/', views.card_statement_close, name='finance-card-statement-close'),
+    path('finance/cards/<int:pk>/statements/<int:sid>/pay/', views.card_statement_pay, name='finance-card-statement-pay'),
 ]

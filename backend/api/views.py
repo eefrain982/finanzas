@@ -6,12 +6,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Budget, CardExpense, CardPayment, CreditCard, Category, Item, Transaction
+from .models import Budget, CardExpense, CardPayment, CardStatement, CreditCard, Category, Item, Transaction
 from .permissions import IsAdminRole
 from .serializers import (
     BudgetSerializer,
     CardExpenseSerializer,
     CardPaymentSerializer,
+    CardStatementSerializer,
     CreditCardSerializer,
     CategorySerializer,
     ItemSerializer,
@@ -520,10 +521,50 @@ def card_payments(request, pk):
     data = request.data.copy()
     data['card'] = card.pk
     serializer = CardPaymentSerializer(data=data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=201)
-    return Response(serializer.errors, status=400)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    payment = serializer.save()
+
+    # ── Lógica de pago total: marcar gastos y avanzar MSI ──────────────────
+    if payment.tipo == 'total':
+        import datetime
+        from dateutil.relativedelta import relativedelta
+
+        today = datetime.date.today()
+        corte_dia = card.corte_dia
+
+        # Calcular periodo actual
+        if today.day <= corte_dia:
+            inicio_periodo = (today.replace(day=1) - relativedelta(months=1)).replace(day=corte_dia + 1)
+            fin_periodo = today.replace(day=corte_dia)
+        else:
+            inicio_periodo = today.replace(day=corte_dia + 1)
+            fin_periodo = (today + relativedelta(months=1)).replace(day=corte_dia)
+
+        # Gastos no pagados del periodo
+        gastos_periodo = card.expenses.filter(
+            pagado=False,
+            fecha__gte=inicio_periodo,
+            fecha__lte=fin_periodo,
+        )
+
+        for gasto in gastos_periodo:
+            if gasto.es_msi:
+                # ¿Es la última mensualidad?
+                if gasto.mes_actual >= gasto.meses:
+                    # MSI completado — marcar pagado permanentemente
+                    gasto.pagado = True
+                else:
+                    # Avanzar al siguiente mes y resetear para el próximo periodo
+                    gasto.mes_actual += 1
+                    gasto.pagado = False
+            else:
+                # Gasto de una sola exhibición — pagado definitivo
+                gasto.pagado = True
+            gasto.save()
+
+    return Response(serializer.data, status=201)
 
 
 @api_view(['DELETE'])
@@ -547,24 +588,33 @@ def card_summary(request, pk):
     today = datetime.date.today()
 
     # Calcular inicio y fin del periodo de corte actual
-    # El periodo va desde el día después del último corte hasta el día de corte actual
     corte_dia = card.corte_dia
     if today.day <= corte_dia:
-        # Estamos antes del corte → el periodo empezó el mes pasado
         inicio_periodo = (today.replace(day=1) - relativedelta(months=1)).replace(day=corte_dia + 1)
         fin_periodo = today.replace(day=corte_dia)
     else:
-        # Ya pasó el corte → el periodo empezó este mes
         inicio_periodo = today.replace(day=corte_dia + 1)
         fin_periodo = (today + relativedelta(months=1)).replace(day=corte_dia)
 
-    # Gastos del periodo actual (por fecha)
-    expenses_periodo = card.expenses.filter(
+    # Gastos del periodo actual:
+    # - Gastos normales: por fecha dentro del periodo
+    # - Gastos MSI: aparecen mientras no estén pagados definitivamente (mes_actual < meses o meses == 1)
+    gastos_normales = card.expenses.filter(
+        es_msi=False,
+        pagado=False,
         fecha__gte=inicio_periodo,
         fecha__lte=fin_periodo,
     )
+    gastos_msi_activos = card.expenses.filter(
+        es_msi=True,
+        pagado=False,
+    )
+    # Combinar IDs
+    ids_periodo = list(gastos_normales.values_list('id', flat=True)) + \
+                  list(gastos_msi_activos.values_list('id', flat=True))
+    expenses_periodo = card.expenses.filter(id__in=ids_periodo).order_by('-fecha')
 
-    # Saldo total (todos los gastos no pagados — afecta tope de crédito)
+    # Saldo total = todos los gastos no pagados (afecta tope de crédito)
     saldo_total = float(
         card.expenses.filter(pagado=False).aggregate(
             total=Sum('monto_total')
@@ -573,7 +623,7 @@ def card_summary(request, pk):
 
     # Mensualidades del periodo (afecta límite mensual)
     mensualidades_periodo = sum(
-        float(e.mensualidad) for e in expenses_periodo.filter(pagado=False)
+        float(e.mensualidad) for e in expenses_periodo
     )
 
     disponible = float(card.limite_credito) - saldo_total
@@ -610,3 +660,144 @@ def card_summary(request, pk):
         'fin_periodo': fin_periodo.isoformat(),
         'gastos_periodo': CardExpenseSerializer(expenses_periodo, many=True).data,
     })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CARD STATEMENTS — estado de cuenta por periodo
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _get_or_create_open_statement(card):
+    """Devuelve el estado de cuenta abierto de la tarjeta (lo crea si no existe)."""
+    import datetime
+    from dateutil.relativedelta import relativedelta
+
+    stmt = card.statements.filter(
+        estado=CardStatement.StatementStatus.ABIERTO
+    ).first()
+    if stmt:
+        return stmt
+
+    today = datetime.date.today()
+    corte_dia = card.corte_dia
+
+    # Calcular inicio y fin del periodo actual
+    if today.day <= corte_dia:
+        fin   = today.replace(day=corte_dia)
+        inicio = (fin.replace(day=1) - relativedelta(months=1)).replace(day=corte_dia + 1)
+    else:
+        inicio = today.replace(day=corte_dia + 1)
+        fin    = (today + relativedelta(months=1)).replace(day=corte_dia)
+
+    pago_dia = card.pago_dia
+    if fin.day < pago_dia:
+        fecha_pago_limite = fin.replace(day=pago_dia)
+    else:
+        fecha_pago_limite = (fin + relativedelta(months=1)).replace(day=pago_dia)
+
+    return CardStatement.objects.create(
+        card=card,
+        inicio=inicio,
+        fin=fin,
+        fecha_pago_limite=fecha_pago_limite,
+        estado=CardStatement.StatementStatus.ABIERTO,
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def card_statements(request, pk):
+    """GET: lista de todos los estados de cuenta de una tarjeta."""
+    card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
+    # Auto-crear el periodo abierto si no existe
+    _get_or_create_open_statement(card)
+    stmts = card.statements.all()
+    return Response(CardStatementSerializer(stmts, many=True).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def card_statement_close(request, pk):
+    """Cerrar el periodo abierto: calcula saldo y lo marca cerrado."""
+    card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
+
+    stmt = card.statements.filter(
+        estado=CardStatement.StatementStatus.ABIERTO
+    ).first()
+    if not stmt:
+        return Response({'error': 'No hay periodo abierto.'}, status=400)
+
+    # Ya existe uno cerrado? Solo puede haber uno cerrado a la vez
+    cerrado_previo = card.statements.filter(
+        estado=CardStatement.StatementStatus.CERRADO
+    ).first()
+    if cerrado_previo:
+        return Response(
+            {'error': 'Hay un estado de cuenta cerrado pendiente de pago.'},
+            status=400
+        )
+
+    # Calcular saldo al cerrar: gastos normales del periodo + mensualidades MSI activas
+    gastos_normales = card.expenses.filter(
+        es_msi=False, pagado=False,
+        fecha__gte=stmt.inicio, fecha__lte=stmt.fin,
+    )
+    gastos_msi = card.expenses.filter(es_msi=True, pagado=False)
+    saldo = sum(float(e.monto_total) for e in gastos_normales)
+    mensualidades = sum(float(e.mensualidad) for e in gastos_msi)
+
+    stmt.saldo_total    = saldo + mensualidades
+    stmt.mensualidades  = mensualidades
+    stmt.estado         = CardStatement.StatementStatus.CERRADO
+    stmt.save()
+
+    return Response(CardStatementSerializer(stmt).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def card_statement_pay(request, pk, sid):
+    """Registrar el pago de un estado de cuenta cerrado."""
+    import datetime
+    card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
+    stmt = get_object_or_404(
+        CardStatement, pk=sid, card=card,
+        estado=CardStatement.StatementStatus.CERRADO
+    )
+
+    monto  = request.data.get('monto')
+    notas  = request.data.get('notas', '')
+    tipo   = request.data.get('tipo', 'total')   # 'total' | 'minimo' | 'parcial'
+    fecha  = request.data.get('fecha', datetime.date.today().isoformat())
+
+    if monto is None:
+        return Response({'error': 'El campo monto es requerido.'}, status=400)
+
+    stmt.monto_pagado = monto
+    stmt.pagado_en    = fecha
+    stmt.notas_pago   = notas
+    stmt.estado       = CardStatement.StatementStatus.PAGADO
+    stmt.save()
+
+    # ── Si es pago total o superior, marcar/avanzar gastos del periodo ──────
+    if tipo == 'total' or float(monto) >= float(stmt.saldo_total):
+        gastos_normales = card.expenses.filter(
+            es_msi=False, pagado=False,
+            fecha__gte=stmt.inicio, fecha__lte=stmt.fin,
+        )
+        gastos_msi = card.expenses.filter(es_msi=True, pagado=False)
+
+        for gasto in gastos_normales:
+            gasto.pagado = True
+            gasto.save()
+
+        for gasto in gastos_msi:
+            if gasto.mes_actual >= gasto.meses:
+                gasto.pagado = True
+            else:
+                gasto.mes_actual += 1
+            gasto.save()
+
+    # Auto-crear el siguiente periodo abierto
+    _get_or_create_open_statement(card)
+
+    return Response(CardStatementSerializer(stmt).data)

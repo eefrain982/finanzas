@@ -205,6 +205,8 @@ import type {
   CardExpenseFormData,
   CardPayment,
   CardPaymentFormData,
+  CardStatement,
+  StatementPayFormData,
   CardSummary,
 } from "@/types/finance";
 
@@ -322,4 +324,39 @@ export async function deleteCardPayment(
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Error al eliminar pago");
+}
+
+// ─── Estados de Cuenta ───────────────────────────────────────────────────────
+
+export async function getCardStatements(cardId: number): Promise<CardStatement[]> {
+  const res = await apiFetch(`/finance/cards/${cardId}/statements/`);
+  if (!res.ok) throw new Error("Error al cargar estados de cuenta");
+  return res.json();
+}
+
+export async function closeCardStatement(cardId: number): Promise<CardStatement> {
+  const res = await apiFetch(`/finance/cards/${cardId}/statements/close/`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error ?? "Error al cerrar estado de cuenta");
+  }
+  return res.json();
+}
+
+export async function payCardStatement(
+  cardId: number,
+  statementId: number,
+  data: StatementPayFormData
+): Promise<CardStatement> {
+  const res = await apiFetch(
+    `/finance/cards/${cardId}/statements/${statementId}/pay/`,
+    { method: "POST", body: JSON.stringify(data) }
+  );
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error ?? "Error al registrar pago");
+  }
+  return res.json();
 }
