@@ -580,69 +580,58 @@ def card_payment_detail(request, pk, payment_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def card_summary(request, pk):
-    """Resumen financiero de la tarjeta: saldos, disponible, uso mensual."""
+    """Resumen financiero de la tarjeta: saldos, disponible, uso mensual.
+
+    Las fechas del periodo activo se obtienen del CardStatement abierto
+    (fuente canónica) en lugar de recalcularlas desde corte_dia.
+    """
     import datetime
-    from dateutil.relativedelta import relativedelta
 
     card = get_object_or_404(CreditCard, pk=pk, owner=request.user)
     today = datetime.date.today()
 
-    # Calcular inicio y fin del periodo de corte actual
-    corte_dia = card.corte_dia
-    if today.day <= corte_dia:
-        inicio_periodo = (today.replace(day=1) - relativedelta(months=1)).replace(day=corte_dia + 1)
-        fin_periodo = today.replace(day=corte_dia)
-    else:
-        inicio_periodo = today.replace(day=corte_dia + 1)
-        fin_periodo = (today + relativedelta(months=1)).replace(day=corte_dia)
+    # ── Periodo activo: tomar fechas del statement abierto ────────────────────
+    stmt = _get_or_create_open_statement(card)
+    inicio_periodo = stmt.inicio
+    fin_periodo    = stmt.fin
+    prox_corte     = stmt.fin                  # fecha de corte = fin del periodo
+    prox_pago      = stmt.fecha_pago_limite    # fecha límite de pago del periodo
 
-    # Gastos del periodo actual:
-    # - Gastos normales: por fecha dentro del periodo
-    # - Gastos MSI: aparecen mientras no estén pagados definitivamente (mes_actual < meses o meses == 1)
+    dias_para_corte = (prox_corte - today).days
+
+    # ── Gastos del periodo abierto ────────────────────────────────────────────
+    # Gastos normales: fecha dentro del periodo, no pagados
     gastos_normales = card.expenses.filter(
         es_msi=False,
         pagado=False,
         fecha__gte=inicio_periodo,
         fecha__lte=fin_periodo,
     )
+    # Gastos MSI/MCI activos: mensualidades que cargan este mes
     gastos_msi_activos = card.expenses.filter(
         es_msi=True,
         pagado=False,
     )
-    # Combinar IDs
-    ids_periodo = list(gastos_normales.values_list('id', flat=True)) + \
-                  list(gastos_msi_activos.values_list('id', flat=True))
+    ids_periodo = (
+        list(gastos_normales.values_list('id', flat=True)) +
+        list(gastos_msi_activos.values_list('id', flat=True))
+    )
     expenses_periodo = card.expenses.filter(id__in=ids_periodo).order_by('-fecha')
 
-    # Saldo total = todos los gastos no pagados (afecta tope de crédito)
+    # ── Saldos ────────────────────────────────────────────────────────────────
+    # saldo_total: todos los gastos no pagados (consume límite de crédito)
     saldo_total = float(
         card.expenses.filter(pagado=False).aggregate(
             total=Sum('monto_total')
         )['total'] or 0
     )
 
-    # Mensualidades del periodo (afecta límite mensual)
-    mensualidades_periodo = sum(
-        float(e.mensualidad) for e in expenses_periodo
-    )
+    # mensualidades_periodo: suma de mensualidades MSI/MCI activas (consume límite mensual)
+    mensualidades_periodo = sum(float(e.mensualidad) for e in gastos_msi_activos)
 
-    disponible = float(card.limite_credito) - saldo_total
+    disponible  = float(card.limite_credito) - saldo_total
     pct_credito = round(saldo_total / float(card.limite_credito) * 100, 1) if card.limite_credito else 0
     pct_mensual = round(mensualidades_periodo / float(card.limite_mensual) * 100, 1) if card.limite_mensual else 0
-
-    # Próximas fechas
-    if today.day <= corte_dia:
-        prox_corte = today.replace(day=corte_dia)
-    else:
-        prox_corte = (today + relativedelta(months=1)).replace(day=corte_dia)
-
-    pago_dia = card.pago_dia
-    if prox_corte.day < pago_dia:
-        prox_pago = prox_corte.replace(day=pago_dia)
-    else:
-        prox_pago = (prox_corte + relativedelta(months=1)).replace(day=pago_dia)
-
-    dias_para_corte = (prox_corte - today).days
 
     return Response({
         'card': CreditCardSerializer(card).data,
