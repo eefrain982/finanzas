@@ -163,15 +163,37 @@ function PayStatementModal({
       <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md p-6 space-y-4">
         <h2 className="text-lg font-bold text-white">💸 Pagar estado de cuenta</h2>
         <p className="text-sm text-gray-400">Periodo: {fmtDate(statement.inicio)} → {fmtDate(statement.fin)}</p>
-        <p className="text-2xl font-bold text-emerald-400">{fmt(statement.saldo_total)}</p>
+
+        {/* Dos montos de referencia */}
+        <div className="grid grid-cols-2 gap-3 bg-gray-800 rounded-xl p-3">
+          <div>
+            <p className="text-xs text-gray-500 mb-0.5">Sin generar intereses</p>
+            <p className="text-xl font-bold text-emerald-400">{fmt(statement.saldo_total)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-0.5">Saldo total periodo</p>
+            <p className="text-xl font-bold text-white">{fmt(statement.saldo_periodo)}</p>
+          </div>
+          {statement.pago_minimo && (
+            <div className="col-span-2 border-t border-gray-700 pt-2">
+              <p className="text-xs text-gray-500 mb-0.5">Pago mínimo</p>
+              <p className="text-base font-semibold text-yellow-400">{fmt(statement.pago_minimo)}</p>
+            </div>
+          )}
+        </div>
+
         <div>
           <label className="text-xs text-gray-400 mb-2 block">Tipo de pago</label>
           <div className="grid grid-cols-3 gap-2">
             {(["minimo", "total", "parcial"] as const).map((t) => (
               <button key={t} type="button"
-                onClick={() => { set("tipo", t); if (t === "total") set("monto", statement.saldo_total); }}
+                onClick={() => {
+                  set("tipo", t);
+                  if (t === "total") set("monto", statement.saldo_total);
+                  if (t === "minimo" && statement.pago_minimo) set("monto", statement.pago_minimo);
+                }}
                 className={`py-2 rounded-lg text-sm font-medium transition ${form.tipo === t ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}>
-                {t === "minimo" ? "Mínimo" : t === "total" ? "Total" : "Parcial"}
+                {t === "minimo" ? "Mínimo" : t === "total" ? "Sin intereses" : "Parcial"}
               </button>
             ))}
           </div>
@@ -519,21 +541,43 @@ export default function CardDetailPage() {
               <div>
                 <h2 className="text-lg font-bold text-yellow-300">⚠️ Pago pendiente</h2>
                 <p className="text-sm text-yellow-400/70 mt-1">
-                  Periodo cerrado: {fmtDate(closedStatement.inicio)} → {fmtDate(closedStatement.fin)}
+                  Periodo: {fmtDate(closedStatement.inicio)} → {fmtDate(closedStatement.fin)}
                 </p>
                 <p className="text-xs text-yellow-400/50 mt-0.5">
-                  Pagar antes del {fmtDate(closedStatement.fecha_pago_limite)}
+                  Fecha límite: {fmtDate(closedStatement.fecha_pago_limite)}
                 </p>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-3xl font-bold text-yellow-300">{fmt(closedStatement.saldo_total)}</p>
-                {closedStatement.mensualidades !== "0.00" && (
-                  <p className="text-xs text-yellow-400/60 mt-1">
-                    incluye {fmt(closedStatement.mensualidades)} en mensualidades MSI
+              {/* Dos montos: pago sin intereses vs deuda total */}
+              <div className="text-right shrink-0 space-y-1">
+                <div>
+                  <p className="text-xs text-yellow-400/60 uppercase tracking-wide">
+                    Para no generar intereses
                   </p>
+                  <p className="text-3xl font-bold text-yellow-300">
+                    {fmt(closedStatement.saldo_total)}
+                  </p>
+                </div>
+                {closedStatement.saldo_periodo !== closedStatement.saldo_total && (
+                  <div className="border-t border-yellow-500/20 pt-1">
+                    <p className="text-xs text-yellow-400/50 uppercase tracking-wide">
+                      Saldo total del periodo
+                    </p>
+                    <p className="text-lg font-semibold text-yellow-400/80">
+                      {fmt(closedStatement.saldo_periodo)}
+                    </p>
+                    <p className="text-xs text-yellow-400/40 mt-0.5">
+                      incluye {fmt(closedStatement.mensualidades)} en mensualidades diferidas
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
+            {/* Mini resumen de pago mínimo */}
+            {closedStatement.pago_minimo && (
+              <p className="text-xs text-yellow-400/50 mb-3">
+                Pago mínimo: <span className="font-semibold text-yellow-400/70">{fmt(closedStatement.pago_minimo)}</span>
+              </p>
+            )}
             <button
               onClick={() => setPayingStatement(closedStatement)}
               className="w-full bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold py-3 rounded-xl transition text-sm">

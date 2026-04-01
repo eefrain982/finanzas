@@ -267,12 +267,13 @@ for (desc, monto, fecha) in cargos_regulares_p1:
 # Cargos a meses que estaban activos en periodo 1
 gastos_p1_msi = [g_diferido, g_mp1, g_resta_bar, g_usfuel_msi, g_mp2, g_mp_ml, g_sony, g_gob]
 
-saldo_p1 = Decimal("9467.23")   # pago_no_generar_intereses del periodo 1
+saldo_p1 = Decimal("9467.23")    # pago para NO generar intereses
 stmt_p1 = CardStatement.objects.create(
     card=card,
     inicio=p1_inicio,
     fin=p1_fin,
     fecha_pago_limite=p1_fpl,
+    saldo_periodo=Decimal("21357.22"),   # deuda TOTAL incluyendo meses diferidos
     saldo_total=saldo_p1,
     mensualidades=Decimal("1095.48") + Decimal("183.39") + Decimal("360.08") + Decimal("416.58"),
     pago_minimo=Decimal("5322.81"),
@@ -325,17 +326,19 @@ for (desc, monto, fecha) in cargos_regulares_p2:
     )
     gastos_p2.append(g)
 
-# saldo_deudor_total = 11,409.75 (cargos+intereses sin meses) + 6,230.11 (meses pendiente)
-saldo_p2 = Decimal("17639.86")
+# saldo_periodo = saldo total incluyendo meses diferidos (suma de ambas columnas del estado de cuenta)
+# saldo_total   = pago para no generar intereses = $11,409.75
+saldo_p2 = Decimal("11409.75")
 stmt_p2 = CardStatement.objects.create(
     card=card,
     inicio=p2_inicio,
     fin=p2_fin,
     fecha_pago_limite=p2_fpl,
+    saldo_periodo=Decimal("17639.86"),   # 11,409.75 + 6,230.11 (meses pendientes)
     saldo_total=saldo_p2,
     mensualidades=Decimal("183.39") + Decimal("360.08") + Decimal("416.58"),
     pago_minimo=Decimal("5307.43"),
-    estado="cerrado",   # pendiente de pago total
+    estado="cerrado",
     pagado_en=None,
     monto_pagado=None,
     notas_pago="",

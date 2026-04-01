@@ -201,10 +201,13 @@ class CardStatement(models.Model):
     inicio             = models.DateField()          # primer día del periodo
     fin                = models.DateField()          # fecha de corte
     fecha_pago_limite  = models.DateField()          # último día para pagar
-    saldo_total        = models.DecimalField(        # calculado al cerrar
+    saldo_periodo      = models.DecimalField(        # deuda TOTAL incluyendo meses diferidos
         max_digits=12, decimal_places=2, default=0
     )
-    mensualidades      = models.DecimalField(        # suma de mensualidades MSI
+    saldo_total        = models.DecimalField(        # pago para NO generar intereses
+        max_digits=12, decimal_places=2, default=0
+    )
+    mensualidades      = models.DecimalField(        # suma de mensualidades MSI/MCI activas
         max_digits=12, decimal_places=2, default=0
     )
     pago_minimo        = models.DecimalField(

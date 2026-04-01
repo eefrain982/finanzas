@@ -130,12 +130,12 @@ class CardStatementSerializer(serializers.ModelSerializer):
         model = CardStatement
         fields = [
             "id", "card", "inicio", "fin", "fecha_pago_limite",
-            "saldo_total", "mensualidades", "pago_minimo", "estado",
+            "saldo_periodo", "saldo_total", "mensualidades", "pago_minimo", "estado",
             "pagado_en", "monto_pagado", "notas_pago",
             "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "saldo_total", "mensualidades", "estado",
+            "id", "saldo_periodo", "saldo_total", "mensualidades", "estado",
             "created_at", "updated_at",
         ]
 

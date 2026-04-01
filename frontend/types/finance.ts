@@ -162,7 +162,8 @@ export interface CardStatement {
   inicio: string;
   fin: string;
   fecha_pago_limite: string;
-  saldo_total: string;
+  saldo_periodo: string;   // deuda TOTAL incluyendo meses diferidos
+  saldo_total: string;     // pago para NO generar intereses
   mensualidades: string;
   pago_minimo: string | null;
   estado: StatementStatus;
