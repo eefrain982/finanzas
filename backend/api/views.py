@@ -618,12 +618,18 @@ def card_summary(request, pk):
     expenses_periodo = card.expenses.filter(id__in=ids_periodo).order_by('-fecha')
 
     # ── Saldos ────────────────────────────────────────────────────────────────
-    # saldo_total: todos los gastos no pagados (consume límite de crédito)
-    saldo_total = float(
-        card.expenses.filter(pagado=False).aggregate(
-            total=Sum('monto_total')
-        )['total'] or 0
+    # saldo_total real = gastos normales no pagados + deuda pendiente de diferidos
+    # Para diferidos: deuda pendiente = mensualidades_restantes × mensualidad
+    # (no monto_total, que es el precio original completo)
+    gastos_una_exhibicion = card.expenses.filter(pagado=False, meses=1)
+    saldo_normales = float(
+        gastos_una_exhibicion.aggregate(total=Sum('monto_total'))['total'] or 0
     )
+    saldo_diferidos = sum(
+        float(e.mensualidad) * (e.meses - e.mes_actual + 1)
+        for e in gastos_diferidos_activos
+    )
+    saldo_total = saldo_normales + saldo_diferidos
 
     # mensualidades_periodo: suma de mensualidades de todos los diferidos activos
     mensualidades_periodo = sum(float(e.mensualidad) for e in gastos_diferidos_activos)
