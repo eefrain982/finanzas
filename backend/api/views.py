@@ -600,21 +600,20 @@ def card_summary(request, pk):
     dias_para_corte = (prox_corte - today).days
 
     # ── Gastos del periodo abierto ────────────────────────────────────────────
-    # Gastos normales: fecha dentro del periodo, no pagados
+    # Gastos de una sola exhibición: es_msi=False, meses=1, dentro del rango
     gastos_normales = card.expenses.filter(
-        es_msi=False,
+        es_msi=False, meses=1,
         pagado=False,
         fecha__gte=inicio_periodo,
         fecha__lte=fin_periodo,
     )
-    # Gastos MSI/MCI activos: mensualidades que cargan este mes
-    gastos_msi_activos = card.expenses.filter(
-        es_msi=True,
-        pagado=False,
+    # Gastos a meses activos: MSI (es_msi=True) o MCI/diferidos (meses>1)
+    gastos_diferidos_activos = card.expenses.filter(
+        pagado=False, meses__gt=1,
     )
     ids_periodo = (
         list(gastos_normales.values_list('id', flat=True)) +
-        list(gastos_msi_activos.values_list('id', flat=True))
+        list(gastos_diferidos_activos.values_list('id', flat=True))
     )
     expenses_periodo = card.expenses.filter(id__in=ids_periodo).order_by('-fecha')
 
@@ -626,8 +625,8 @@ def card_summary(request, pk):
         )['total'] or 0
     )
 
-    # mensualidades_periodo: suma de mensualidades MSI/MCI activas (consume límite mensual)
-    mensualidades_periodo = sum(float(e.mensualidad) for e in gastos_msi_activos)
+    # mensualidades_periodo: suma de mensualidades de todos los diferidos activos
+    mensualidades_periodo = sum(float(e.mensualidad) for e in gastos_diferidos_activos)
 
     disponible  = float(card.limite_credito) - saldo_total
     pct_credito = round(saldo_total / float(card.limite_credito) * 100, 1) if card.limite_credito else 0
@@ -725,14 +724,16 @@ def card_statement_close(request, pk):
             status=400
         )
 
-    # Calcular saldo al cerrar: gastos normales del periodo + mensualidades MSI activas
+    # Calcular saldo al cerrar:
+    # - Gastos de una sola exhibición (es_msi=False, meses=1) en el rango del periodo
+    # - Mensualidades de gastos a meses (MSI con es_msi=True, o MCI/diferidos con meses>1)
     gastos_normales = card.expenses.filter(
-        es_msi=False, pagado=False,
+        es_msi=False, meses=1, pagado=False,
         fecha__gte=stmt.inicio, fecha__lte=stmt.fin,
     )
-    gastos_msi = card.expenses.filter(es_msi=True, pagado=False)
+    gastos_diferidos = card.expenses.filter(pagado=False, meses__gt=1)
     saldo = sum(float(e.monto_total) for e in gastos_normales)
-    mensualidades = sum(float(e.mensualidad) for e in gastos_msi)
+    mensualidades = sum(float(e.mensualidad) for e in gastos_diferidos)
 
     stmt.saldo_total    = saldo + mensualidades
     stmt.mensualidades  = mensualidades
@@ -769,17 +770,19 @@ def card_statement_pay(request, pk, sid):
 
     # ── Si es pago total o superior, marcar/avanzar gastos del periodo ──────
     if tipo == 'total' or float(monto) >= float(stmt.saldo_total):
+        # Gastos de una sola exhibición: es_msi=False Y meses=1, dentro del periodo
         gastos_normales = card.expenses.filter(
-            es_msi=False, pagado=False,
+            es_msi=False, meses=1, pagado=False,
             fecha__gte=stmt.inicio, fecha__lte=stmt.fin,
         )
-        gastos_msi = card.expenses.filter(es_msi=True, pagado=False)
+        # Gastos a meses: MSI (es_msi=True) o MCI/diferidos (es_msi=False, meses>1)
+        gastos_diferidos = card.expenses.filter(pagado=False, meses__gt=1)
 
         for gasto in gastos_normales:
             gasto.pagado = True
             gasto.save()
 
-        for gasto in gastos_msi:
+        for gasto in gastos_diferidos:
             if gasto.mes_actual >= gasto.meses:
                 gasto.pagado = True
             else:
